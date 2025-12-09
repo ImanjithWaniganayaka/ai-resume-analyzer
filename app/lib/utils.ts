@@ -1,40 +1,26 @@
 import { twMerge } from "tailwind-merge";
 
-// Minimal replacement for `clsx` to avoid external dependency
-export type ClassValue =
-  | string
-  | number
-  | null
-  | undefined
-  | ClassValue[]
-  | { [className: string]: boolean | undefined | null };
+// Minimal replacement for clsx/classnames behavior we need in this project
+type Primitive = string | number | boolean | null | undefined;
+type ClassDictionary = Record<string, boolean | undefined | null>;
+type ClassArray = ClassValue[];
+export type ClassValue = Primitive | ClassDictionary | ClassArray;
 
-function cx(...inputs: ClassValue[]): string {
-  const classes: string[] = [];
-  const push = (val: ClassValue): void => {
-    if (!val && val !== 0) return;
-    if (typeof val === "string" || typeof val === "number") {
-      if (String(val).trim()) classes.push(String(val));
-      return;
+function toClassName(value: ClassValue): string {
+    if (!value) return "";
+    if (typeof value === "string" || typeof value === "number") return String(value);
+    if (Array.isArray(value)) return value.map(toClassName).filter(Boolean).join(" ");
+    if (typeof value === "object") {
+        return Object.entries(value)
+            .filter(([, v]) => Boolean(v))
+            .map(([k]) => k)
+            .join(" ");
     }
-    if (Array.isArray(val)) {
-      for (const v of val) push(v);
-      return;
-    }
-    if (typeof val === "object") {
-      for (const key in val) {
-        if (Object.prototype.hasOwnProperty.call(val, key) && (val as any)[key]) {
-          if (key.trim()) classes.push(key);
-        }
-      }
-    }
-  };
-  for (const input of inputs) push(input);
-  return classes.join(" ");
+    return "";
 }
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(cx(...inputs));
+    return twMerge(toClassName(inputs));
 }
 
 export function formatSize(bytes: number): string {

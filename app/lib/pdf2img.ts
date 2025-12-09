@@ -15,8 +15,29 @@ async function loadPdfJs(): Promise<any> {
     isLoading = true;
     // @ts-expect-error - pdfjs-dist/build/pdf.mjs is not a module
     loadPromise = import("pdfjs-dist/build/pdf.mjs").then((lib) => {
-        // Set the worker source to use local file
-        lib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+        // Ensure the pdf.js worker matches the installed library version.
+        // Prefer creating a module Worker so bundlers like Vite resolve it correctly.
+        try {
+            // Some environments support providing a Worker instance directly
+            // @ts-expect-error - types may not include workerPort
+            lib.GlobalWorkerOptions.workerPort = new Worker(
+                new URL("pdfjs-dist/build/pdf.worker.mjs", import.meta.url),
+                { type: "module" }
+            );
+        } catch (_) {
+            // Fallback to a resolved worker URL string
+            try {
+                // @ts-expect-error - types allow string src
+                lib.GlobalWorkerOptions.workerSrc = new URL(
+                    "pdfjs-dist/build/pdf.worker.mjs",
+                    import.meta.url
+                ).toString();
+            } catch {
+                // As a last resort, keep the previous public path if present
+                // @ts-expect-error - string accepted by pdf.js
+                lib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+            }
+        }
         pdfjsLib = lib;
         isLoading = false;
         return lib;
@@ -42,12 +63,18 @@ export async function convertPdfToImage(
         canvas.width = viewport.width;
         canvas.height = viewport.height;
 
-        if (context) {
-            context.imageSmoothingEnabled = true;
-            context.imageSmoothingQuality = "high";
+        if (!context) {
+            return {
+                imageUrl: "",
+                file: null,
+                error: "Failed to get 2D canvas context",
+            };
         }
 
-        await page.render({ canvasContext: context!, viewport }).promise;
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = "high";
+
+        await page.render({ canvasContext: context, viewport }).promise;
 
         return new Promise((resolve) => {
             canvas.toBlob(
