@@ -5,41 +5,29 @@ export interface PdfConversionResult {
 }
 
 let pdfjsLib: any = null;
-let isLoading = false;
 let loadPromise: Promise<any> | null = null;
 
 async function loadPdfJs(): Promise<any> {
     if (pdfjsLib) return pdfjsLib;
     if (loadPromise) return loadPromise;
 
-    isLoading = true;
-    // @ts-expect-error - pdfjs-dist/build/pdf.mjs is not a module
     loadPromise = import("pdfjs-dist/build/pdf.mjs").then((lib) => {
-        // Ensure the pdf.js worker matches the installed library version.
-        // Prefer creating a module Worker so bundlers like Vite resolve it correctly.
         try {
-            // Some environments support providing a Worker instance directly
-            // @ts-expect-error - types may not include workerPort
             lib.GlobalWorkerOptions.workerPort = new Worker(
                 new URL("pdfjs-dist/build/pdf.worker.mjs", import.meta.url),
                 { type: "module" }
             );
         } catch (_) {
-            // Fallback to a resolved worker URL string
             try {
-                // @ts-expect-error - types allow string src
                 lib.GlobalWorkerOptions.workerSrc = new URL(
                     "pdfjs-dist/build/pdf.worker.mjs",
                     import.meta.url
                 ).toString();
             } catch {
-                // As a last resort, keep the previous public path if present
-                // @ts-expect-error - string accepted by pdf.js
                 lib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
             }
         }
         pdfjsLib = lib;
-        isLoading = false;
         return lib;
     });
 
@@ -56,7 +44,7 @@ export async function convertPdfToImage(
         const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
         const page = await pdf.getPage(1);
 
-        const viewport = page.getViewport({ scale: 4 });
+        const viewport = page.getViewport({ scale: 1.5 });
         const canvas = document.createElement("canvas");
         const context = canvas.getContext("2d");
 
@@ -80,7 +68,6 @@ export async function convertPdfToImage(
             canvas.toBlob(
                 (blob) => {
                     if (blob) {
-                        // Create a File from the blob with the same name as the pdf
                         const originalName = file.name.replace(/\.pdf$/i, "");
                         const imageFile = new File([blob], `${originalName}.png`, {
                             type: "image/png",
@@ -100,7 +87,7 @@ export async function convertPdfToImage(
                 },
                 "image/png",
                 1.0
-            ); // Set quality to maximum (1.0)
+            );
         });
     } catch (err) {
         return {
